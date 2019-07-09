@@ -25,9 +25,12 @@ local function get_status(url, dev)
 		
 		for k,v in ipairs(data.tcp) do
 -- 			local tag = string.sub(v.name,#v.name-6,-4)
-			
-			log:info(k, cjson.encode(v.name))
-            dev:set_input_prop_emergency('com_to_net_mapport', 'value', v.remote_addr)
+			if v.status == "running" then
+				log:info(k, cjson.encode(v.name))
+				dev:set_input_prop_emergency('com_to_net_mapport', 'value', v.remote_addr)
+			else
+				dev:set_input_prop_emergency('com_to_net_mapport', 'value', ' ')
+			end
 		end
 		return true
 	else

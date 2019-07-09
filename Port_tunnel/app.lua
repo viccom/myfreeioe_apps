@@ -3,12 +3,56 @@ local sysinfo = require 'utils.sysinfo'
 local services = require 'utils.services'
 local inifile = require 'inifile'
 local cjson = require 'cjson'
+local restful = require 'restful'
+local log = require 'utils.log'
 
 local app = class("FREEIOE_APP_Port_tunnel_CLASS")
 app.API_VER = 1
 
+
+function split(str,reps)
+    local resultStrList = {}
+    string.gsub(str,'[^'..reps..']+',function ( w )
+        table.insert(resultStrList,w)
+    end)
+    return resultStrList
+end
+
+local function get_status(url, dev, gateid, name)
+	local _restapi = restful:new(url)
+	local key = gateid .. "_" .. name
+	local status, body = _restapi:get('/api/status')
+-- 	log:info("get_status::::", status, body)
+	if status and status == 200 then
+		local data = cjson.decode(body)
+-- 		log:info("get_status return::::", cjson.encode(data.tcp))
+		
+		for k,v in ipairs(data.tcp) do
+-- 			local tag = string.sub(v.name,#v.name-6,-4)
+            if v.status == "running" then
+    			if v.name==key then
+				-- 	log:info("get_status::",k, cjson.encode(v.name))
+					local remote_addr = v.remote_addr
+                    local remote_arry = split(v.remote_addr, ':')
+                    if remote_arry[1] == 'vpn.symid.com' then
+                        remote_addr = '172.30.0.187:'..remote_arry[2]
+                    end
+                    dev:set_input_prop_emergency(name, 'value', remote_addr)
+                end
+            else
+                dev:set_input_prop(name, 'value', ' ')
+            end
+		end
+		return true
+	else
+	    dev:set_input_prop(name, 'value', ' ')
+	end
+	return nil
+end
+
 local function get_default_conf(sys, conf)
 	local ini_conf = {}
+	local tcp_maps = {}
 	local id = sys:id()
 
 	ini_conf.common = {
@@ -37,7 +81,7 @@ local function get_default_conf(sys, conf)
 		}
     end
 
-	if conf.enable_webshell then
+	if conf.enable_pweb then
 		ini_conf[id..'__pweb'] = {
 			['type'] = 'http',
 			local_port = 80,
@@ -49,6 +93,7 @@ local function get_default_conf(sys, conf)
 	end
 
 	for k,v in pairs(conf.tcp_devices or {}) do
+		tcp_maps[#tcp_maps + 1] = 'tcp_' .. v.id
 		ini_conf[id..'_tcp_' .. v.id] = {
 			['type'] = 'tcp',
 			local_ip = v.dest_ip,
@@ -88,7 +133,7 @@ local function get_default_conf(sys, conf)
 		end
 	end
 
-	return ini_conf, visitors
+	return ini_conf, visitors ,tcp_maps
 end
 
 
@@ -108,12 +153,13 @@ function app:initialize(name, sys, conf)
 	self._log = sys:logger()
 	self._ini_file = sys:app_dir()..".frpc.ini"
 
-	local conf, visitors = get_default_conf(sys, self._conf)
+	local conf, visitors, tcp_maps = get_default_conf(sys, self._conf)
 
 	self._log:info("config::", cjson.encode(conf))
 
 	inifile.save(self._ini_file, conf)
 	self._visitors = cjson.encode(visitors)
+	self._tcp_maps = tcp_maps
 
 	local frpc_bin = sys:app_dir().."/bin/frpc"
 	self._service = services:new(self._name, frpc_bin, {'-c', self._ini_file})
@@ -141,9 +187,10 @@ function app:start()
 
 				self._log:notice('Try to change FRPC configuration, value:', cjson.encode(value))
 
-				local conf, visitors = get_default_conf(self._sys, self._conf)
+				local conf, visitors, tcp_maps = get_default_conf(self._sys, self._conf)
 				inifile.save(self._ini_file, conf)
 				self._visitors = cjson.encode(visitors)
+				self._tcp_maps = tcp_maps
 
 				if self._conf.auto_start then
 					self._sys:post('service_ctrl', 'restart')
@@ -220,6 +267,25 @@ function app:start()
 			vt = "string",
 		},
 
+	}
+
+    local id_len = #self._sys:id()
+	for k,v in pairs(self._tcp_maps or {}) do
+		-- self._log:debug(p, q)
+		local tcpmap_tag = {
+			name = v,
+			desc = v,
+			vt = "string"
+		}
+		inputs[#inputs + 1] = tcpmap_tag		
+	end
+
+	local outputs = {
+		{
+			name = "config",
+			desc = "new config",
+			vt = "string"
+		},
 	}
 
 	local cmds = {
@@ -373,6 +439,10 @@ function app:set_run_inputs()
 	--- for configurations
 	self._dev:set_input_prop('config', 'value', cjson.encode(self._conf))
 	self._dev:set_input_prop('frpc_visitors', 'value', self._visitors)
+	local id = self._sys:id()
+	for k,v in pairs(self._tcp_maps or {}) do
+		get_status('http://127.0.0.1:7402', self._dev, id, v)		
+	end
 end
 
 function app:run(tms)
