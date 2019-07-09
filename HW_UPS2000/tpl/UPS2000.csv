@@ -1,0 +1,24 @@
+﻿﻿COMMENT,name,description,unit,data type,property,value type,FC,start addr,rate
+INPUT,input_v,输入电压,V,uint16,RO,float,3,11000,0.1
+INPUT,input_f,输入频率,Hz,uint16,RO,float,3,11003,0.1
+INPUT,bypass_v,旁路电压,V,uint16,RO,float,3,11004,0.1
+INPUT,bypass_f,旁路频率,Hz,uint16,RO,float,3,11007,0.1
+INPUT,output_v,输出电压,V,uint16,RO,float,3,11008,0.1
+INPUT,output_i,输出电流,A,uint16,RO,float,3,11011,0.1
+INPUT,output_f,输入频率,Hz,uint16,RO,float,3,11014,0.1
+INPUT,input_ap,输入有功功率,kW,uint16,RO,float,3,11015,0.1
+INPUT,input_app,输入视在功率,kVa,uint16,RO,float,3,11018,0.1
+INPUT,Load_rate,负载率,%,uint16,RO,float,3,11021,0.1
+INPUT,power_mod,供电模式,,uint16,RO,uint16,3,11024,1
+INPUT,input_mode,输入制式,,uint16,RO,uint16,3,11025,1
+INPUT,output_mode,输出制式,,uint16,RO,uint16,3,11026,1
+INPUT,ups_temp,机内温度,℃,uint16,RO,float,3,11027,0.1
+INPUT,ups_status,UPS状态,,uint16,RO,uint16,3,11043,1
+INPUT,Battery_v,电池电压,V,uint16,RO,float,3,12000,0.1
+INPUT,Battery_status,电池状态,,uint16,RO,uint16,3,12002,1
+INPUT,Battery_rc,电池剩余容量,%,uint16,RO,uint16,3,12003,1
+INPUT,Battery_rt,电池后备时间,秒,uint32,RO,uint16,3,12004,1
+INPUT,Battery_nums,电池节数,节,uint16,RO,uint16,3,12007,1
+INPUT,Battery_capacity,电池容量,AH,uint16,RO,uint16,3,12033,1
+INPUT,ups_mode,UPS机型,,uint16,RO,float,3,19009,0.1
+INPUT,status,开机状态,,uint16,RO,uint16,3,11028,1
