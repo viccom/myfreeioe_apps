@@ -44,6 +44,10 @@ local function get_status(url, dev, gateid, name)
             end
 		end
 		return true
+		
+		
+		
+		
 	else
 	    dev:set_input_prop(name, 'value', ' ')
 	end
@@ -77,6 +81,18 @@ local function get_default_conf(sys, conf)
 			local_ip = '127.0.0.1',
 			local_port = 7402,
 			use_encryption = true,
+			use_compression = true,
+		}
+    end
+
+	if conf.enable_remoteDebug then
+	    tcp_maps[#tcp_maps + 1] = 'tcp_' .. 'remoteDebug'
+		ini_conf[id..'_tcp_' .. 'remoteDebug'] = {
+			['type'] = 'tcp',
+			local_ip = '127.0.0.1',
+			local_port = '8818',
+			remote_port = '0',
+			use_encryption = false,
 			use_compression = true,
 		}
     end
