@@ -69,7 +69,10 @@ local function get_default_conf(sys, conf)
 		}
   	end
 
-	local model_number =  string.sub( id, 1, 7)
+	local model_number =  string.sub( id, 1, 6)
+    if model_number == "2-3000" then
+        model_number =  string.sub( id, 1, 7)
+    end
 	if com_table[model_number] then
 
 		ini_conf[id..'__ser2net_vserial'] = {
@@ -131,7 +134,10 @@ end
 function app:start()
 	local sys = self._sys
 	local id = sys:id()
-	local model_number =  string.sub( id, 1, 7)
+	local model_number =  string.sub( id, 1, 6)
+    if model_number == "2-3000" then
+        model_number =  string.sub( id, 1, 7)
+    end
 	self._api:set_handler({
 		on_output = function(app, sn, output, prop, value)
 			self._log:trace('on_output', app, sn, output, prop, value)
@@ -400,8 +406,6 @@ function app:start()
 		},
 	}
 	
-	local model_number =  string.sub( self._sys:id(), 1, 7)
-	self._log:info("model_number::", model_number)
 	if com_table[model_number]==nil then
 		self._log:error("APP not support the model!")
 	end
