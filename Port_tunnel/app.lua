@@ -37,17 +37,30 @@ local function get_status(url, dev, gateid, name)
                     if remote_arry[1] == 'vpn.symid.com' then
                         remote_addr = '172.30.0.187:'..remote_arry[2]
                     end
-                    dev:set_input_prop_emergency(name, 'value', remote_addr)
+                    dev:set_input_prop(name, 'value', remote_addr)
                 end
             else
                 dev:set_input_prop(name, 'value', ' ')
             end
 		end
+		for k,v in ipairs(data.udp) do
+-- 			local tag = string.sub(v.name,#v.name-6,-4)
+            if v.status == "running" then
+    			if v.name==key then
+				-- 	log:info("get_status::",k, cjson.encode(v.name))
+					local remote_addr = v.remote_addr
+                    local remote_arry = split(v.remote_addr, ':')
+                    if remote_arry[1] == 'vpn.symid.com' then
+                        remote_addr = '172.30.0.187:'..remote_arry[2]
+                    end
+                    dev:set_input_prop(name, 'value', remote_addr)
+                end
+            else
+                dev:set_input_prop(name, 'value', ' ')
+            end
+		end
+		
 		return true
-		
-		
-		
-		
 	else
 	    dev:set_input_prop(name, 'value', ' ')
 	end
@@ -57,6 +70,7 @@ end
 local function get_default_conf(sys, conf)
 	local ini_conf = {}
 	local tcp_maps = {}
+	local udp_maps = {}
 	local id = sys:id()
 
 	ini_conf.common = {
@@ -121,6 +135,7 @@ local function get_default_conf(sys, conf)
 	end
 
 	for k,v in pairs(conf.udp_devices or {}) do
+	    udp_maps[#udp_maps + 1] = 'udp_' .. v.id
 		ini_conf[id..'_udp_' .. v.id] = {
 			['type'] = 'udp',
 			local_ip = v.dest_ip,
@@ -149,7 +164,7 @@ local function get_default_conf(sys, conf)
 		end
 	end
 
-	return ini_conf, visitors ,tcp_maps
+	return ini_conf, visitors ,tcp_maps, udp_maps
 end
 
 
@@ -169,13 +184,14 @@ function app:initialize(name, sys, conf)
 	self._log = sys:logger()
 	self._ini_file = sys:app_dir()..".frpc.ini"
 
-	local conf, visitors, tcp_maps = get_default_conf(sys, self._conf)
+	local conf, visitors, tcp_maps, udp_maps = get_default_conf(sys, self._conf)
 
 	self._log:info("config::", cjson.encode(conf))
 
 	inifile.save(self._ini_file, conf)
 	self._visitors = cjson.encode(visitors)
 	self._tcp_maps = tcp_maps
+	self._udp_maps = udp_maps
 
 	local frpc_bin = sys:app_dir().."/bin/frpc"
 	self._service = services:new(self._name, frpc_bin, {'-c', self._ini_file})
@@ -203,10 +219,11 @@ function app:start()
 
 				self._log:notice('Try to change FRPC configuration, value:', cjson.encode(value))
 
-				local conf, visitors, tcp_maps = get_default_conf(self._sys, self._conf)
+				local conf, visitors, tcp_maps, udp_maps = get_default_conf(self._sys, self._conf)
 				inifile.save(self._ini_file, conf)
 				self._visitors = cjson.encode(visitors)
 				self._tcp_maps = tcp_maps
+				self._udp_maps = udp_maps
 
 				if self._conf.auto_start then
 					self._sys:post('service_ctrl', 'restart')
@@ -295,6 +312,16 @@ function app:start()
 		}
 		inputs[#inputs + 1] = tcpmap_tag		
 	end
+	for k,v in pairs(self._udp_maps or {}) do
+		-- self._log:debug(p, q)
+		local udpmap_tag = {
+			name = v,
+			desc = v,
+			vt = "string"
+		}
+		inputs[#inputs + 1] = udpmap_tag		
+	end
+
 
 	local outputs = {
 		{
@@ -457,6 +484,10 @@ function app:set_run_inputs()
 	self._dev:set_input_prop('frpc_visitors', 'value', self._visitors)
 	local id = self._sys:id()
 	for k,v in pairs(self._tcp_maps or {}) do
+		get_status('http://127.0.0.1:7402', self._dev, id, v)		
+	end
+	
+	for k,v in pairs(self._udp_maps or {}) do
 		get_status('http://127.0.0.1:7402', self._dev, id, v)		
 	end
 end
