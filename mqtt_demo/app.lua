@@ -1,3 +1,4 @@
+local ioe = require 'ioe'
 local cjson = require 'cjson.safe'
 local mqtt_app = require 'app.base.mqtt'
 
@@ -108,11 +109,16 @@ function app:on_publish_data_list(val_list)
     	end
     	return true
     end
-    self:publish(self._mqtt_topic_prefix.."/data", data, 0, false)
+    self:publish(self._mqtt_topic_prefix.."/data_gz", data, 0, false)
 
 	return true
 end
 
+function app:on_publish_cached_data_list(val_list)
+	local data=self:compress(cjson.encode(val_list))
+	self:publish(self._mqtt_topic_prefix.."/cached_data_gz", data, 0, false)
+	return true
+end
 
 function app:on_event(app, sn, level, data, timestamp)
 	local msg = {
@@ -143,17 +149,44 @@ end
 
 function app:on_mqtt_connect_ok()
 	for _, v in ipairs(sub_topics) do
-		self:subscribe("/"..v, 1)
+		self:subscribe(self._mqtt_topic_prefix.."/"..v, 1)
 	end
-	return self:publish(self._mqtt_topic_prefix.."/status", cjson.encode({device=mqtt_id, status="ONLINE"}), 1, true)
+	return self:publish(self._mqtt_topic_prefix.."/status", cjson.encode({device=self._mqtt_topic_prefix, status="ONLINE"}), 1, true)
 end
 
-function app:on_mqtt_message(mid, data, qos, retained)
+function app:on_mqtt_message(packet_id, topic, payload, qos, retained)
+	if topic == 'output' then
+		local data = cjson.encode(payload)
+		local traceid = data.data.id
+		local dev_sn = data.data.device
+		local output = data.data.output
+		local value = data.data.value
+		local device, err = self._api:get_device(dev_sn)
+		if not device then
+			self._log:error('Cannot parse payload!')
+			return self:publish(self._mqtt_topic_prefix.."/result/output", cjson.encode({id=traceid, result=false}), 1, true)
+		end
+		local priv = { id = traceid, dev_sn = dev_sn, input = output }
+		local r, err = device:set_output_prop(output, 'value', value, ioe.time(), priv)
+		if not r then
+			self._log:error('Set output prop failed!', err)
+			return self:publish(self._mqtt_topic_prefix.."/result/output", cjson.encode({id=traceid, result=false}), 1, true)
+		end
+		return self:publish(self._mqtt_topic_prefix.."/result/output", cjson.encode({id=traceid, result=true}), 1, true)
+	end
 	--print(...)
 end
 
+function app:on_output_result(app_src, priv, result, err)
+	if result then
+		return self:publish(self._mqtt_topic_prefix.."/result/output", cjson.encode({id=priv.id, result=true}), 1, true)
+	else
+		return self:publish(self._mqtt_topic_prefix.."/result/output", cjson.encode({id=priv.id, result=false}), 1, true)
+	end
+end
+
 function app:mqtt_will()
-	return self._mqtt_topic_prefix.."/status", cjson.encode({device=mqtt_id, status="OFFLINE"}), 1, true
+	return self._mqtt_topic_prefix.."/status", cjson.encode({device=self._mqtt_topic_prefix, status="OFFLINE"}), 1, true
 end
 
 --- 返回应用对象
