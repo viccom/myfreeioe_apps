@@ -53,9 +53,9 @@ function app:initialize(name, sys, conf)
 	else
 	    conf.period = 10
 	end
-	if conf.app ~= nil then
-    	if #conf.app>0 then
-    	    self._filters = revtable(split(conf.app,','))
+	if conf.devs ~= nil then
+    	if #conf.devs>0 then
+    	    self._filters = revtable(split(conf.devs,','))
     	end
 	end
 	if conf.enable_compress ~= nil then
@@ -66,17 +66,19 @@ function app:initialize(name, sys, conf)
 	end
 -- 	conf.enable_tls = conf.enable_tls or false
 -- 	conf.tls_cert = "root_cert.pem"
-
+    
 	--- 基础类初始化
 	mqtt_app.initialize(self, name, sys, conf)
+	
     self._log = sys:logger()
-	self._mqtt_topic_prefix = sys:id()
--- 	self._log:info("_filters is::", cjson.encode(self._filters))
+    self._mqtt_topic_prefix = sys:id()
+	self._log:info("_filters is::", cjson.encode(self._filters))
 end
 
 function app:on_input(src_app, sn, input, prop, value, timestamp, quality)
     if self._filters~=nil then
-        if (self._filters[src_app]) then
+        -- self._log:info("sn is::", sn)
+        if (self._filters[sn]) then
             mqtt_app.on_input(self, src_app, sn, input, prop, value, timestamp, quality)
         end
     else
@@ -100,18 +102,24 @@ end
 function app:on_publish_data_list(val_list)
     -- self._log:info("val_list is::", cjson.encode(val_list))
     local data=cjson.encode(val_list)
-    if self._enable_compress ~= nil and self._enable_compress then
-        data = self:compress(data)
-    end
+
     if self._enable_batch ~= nil and self._enable_batch==false then
     	for _, v in ipairs(val_list) do
     		self:on_publish_data(table.unpack(v))
     	end
     	return true
+    
     end
-    self:publish(self._mqtt_topic_prefix.."/data_gz", data, 0, false)
-
-	return true
+    
+    if self._enable_compress ~= nil and self._enable_compress then
+        data = self:compress(data)
+        self:publish(self._mqtt_topic_prefix.."/data_gz", data, 0, false)
+	    return true
+        
+    end
+    
+    self:publish(self._mqtt_topic_prefix.."/data", data, 0, false)
+    return true
 end
 
 function app:on_publish_cached_data_list(val_list)
@@ -121,14 +129,18 @@ function app:on_publish_cached_data_list(val_list)
 end
 
 function app:on_event(app, sn, level, data, timestamp)
-	local msg = {
-		app = app,
-		sn = sn,
-		level = level,
-		data = data,
-		timestamp = timestamp,
-	}
-	return self:publish(self._mqtt_topic_prefix.."/events", cjson.encode(msg), 1, false)
+    if self._filters~=nil then
+        if (self._filters[sn]) then
+        	local msg = {
+        		app = app,
+        		sn = sn,
+        		level = level,
+        		data = data,
+        		timestamp = timestamp,
+        	}
+        	return self:publish(self._mqtt_topic_prefix.."/events", cjson.encode(msg), 1, false)
+    	end
+	end
 end
 
 function app:on_stat(app, sn, stat, prop, value, timestamp)
@@ -144,7 +156,32 @@ function app:on_stat(app, sn, stat, prop, value, timestamp)
 end
 
 function app:on_publish_devices(devices)
-	return self:publish(self._mqtt_topic_prefix.."/devices", cjson.encode(devices), 1, true)
+    -- self._log:info(" devices is:", cjson.encode(devices))
+    local newdevs = {}
+    if self._filters~=nil then
+        -- self._log:info(" devices length:", #devices)
+        for k, v in pairs(devices) do
+            -- self._log:info(k.." is::", cjson.encode(self._filters[k]))
+            if (self._filters[k]) then
+                newdevs[#newdevs + 1] = v
+            end
+        end
+    else
+        for k, v in pairs(devices) do
+            newdevs[#newdevs + 1] = v
+        end
+    end
+    
+    if #newdevs >0 then
+        if self._enable_compress ~= nil and self._enable_compress then
+            local data=self:compress(cjson.encode(newdevs))
+            self:publish(self._mqtt_topic_prefix.."/devices", nil, 1, true)
+            return self:publish(self._mqtt_topic_prefix.."/devices_gz", data, 1, true)
+        else
+            self:publish(self._mqtt_topic_prefix.."/devices_gz", nil, 1, true)
+            return self:publish(self._mqtt_topic_prefix.."/devices", cjson.encode(newdevs), 1, true)
+        end
+	end
 end
 
 function app:on_mqtt_connect_ok()
