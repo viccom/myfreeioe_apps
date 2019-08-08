@@ -64,6 +64,12 @@ function app:initialize(name, sys, conf)
 	if conf.enable_batch ~= nil then
         self._enable_batch = conf.enable_batch
 	end
+
+	if conf.enable_data_cache ~= nil then
+		conf.enable_data_cache = conf.enable_data_cache
+	else
+		conf.enable_data_cache = 0
+	end
 -- 	conf.enable_tls = conf.enable_tls or false
 -- 	conf.tls_cert = "root_cert.pem"
     
@@ -188,7 +194,7 @@ function app:on_mqtt_connect_ok()
 	for _, v in ipairs(sub_topics) do
 		self:subscribe(self._mqtt_topic_prefix.."/"..v, 1)
 	end
-	return self:publish(self._mqtt_topic_prefix.."/status", cjson.encode({device=self._mqtt_topic_prefix, status="ONLINE"}), 1, true)
+	return self:publish(self._mqtt_topic_prefix.."/status", cjson.encode({device=self._mqtt_topic_prefix, status="ONLINE", time=ioe.time()}), 1, true)
 end
 
 function app:on_mqtt_message(packet_id, topic, payload, qos, retained)
