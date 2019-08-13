@@ -1,0 +1,70 @@
+串口驱动2种：
+VSPAX
+VSPC
+
+1. 检查本地服务的程序版本
+v1/update/api/version
+{"id":"yourid"}
+
+2. 升级本地服务的程序
+v1/update/api/update
+{
+	"id":"yourid"，
+	"update_confirm":freeioe_Rprogramming_lastest.update,
+	"new_version":freeioe_Rprogramming_lastest.new_version,
+	"new_version_filename":freeioe_Rprogramming_lastest.new_version_filename
+}
+
+3. 检查云端代理服务器列表
+v1/update/api/servers_list
+{"id":"yourid"}
+
+4. 保持和本地服务的心跳
+v1/vspc/api/keep_alive
+{
+        "id":"id",
+        "enable_heartbeat": true,
+        "heartbeat_timeout" : 60
+    };
+    
+5. 本地服务升级时，检测升级状态
+v1/update/api/update_status
+{"id":"yourid"}
+
+6. 查询本机的所有串口
+v1/vspc/api/list
+{"id":"yourid"}
+
+7. 在本机增加虚拟串口
+v1/vspc/api/add
+{
+	"id":"id",
+	"by_name": 1,
+	"name": "COM1",
+	"peer": {
+		"type":"tcp_client",
+		"host": "123.123.123.123",
+		"port": "45678",
+		"info":{"sn": gate_sn, "com_cfg": com_cfg, "serial_driver":serial_driver}
+	}
+}
+
+8. 在本机移除虚拟串口
+v1/vspc/api/remove
+{
+	"id":"id",
+	"by_name": 1,
+	"name": "COM1"
+}
+
+topic匹配规则
+SOCKET_STREAM
+VSPAX_STREAM
+VSPAX_STATUS
+VSPAX_NOTIFY
+VSPC_STREAM
+VSPC_STATUS
+VSPC_NOTIFY
+
+v1/vspax/api/RESULT
+v1/vspc/api/RESULT

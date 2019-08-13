@@ -1,0 +1,68 @@
+
+1. 检查本地服务的版本
+v1/update/api/version
+{"id":"id"}
+
+2. 检查本地服务升级状态
+v1/update/api/update_status
+
+3. 检查代理服务器列表
+v1/update/api/servers_list
+{"id":"id"}
+
+4. 检查本地服务的Vnet运行环境
+v1/vnet/api/checkenv
+{"id":"id"}
+
+5. 修复本地服务的Vnet运行环境
+v1/vnet/api/fixenv
+{"id":"id"}
+
+
+6. 启动本地虚拟网络
+v1/vnet/api/service_start
+{
+	"id":"id",
+	"vnet_cfg": "vnet_cfg",
+	"frps_cfg": "frps_cfg"
+}
+
+7. 停止本地虚拟网络
+v1/vnet/api/service_start
+{
+	"id":"id",
+	"vnet_cfg": "vnet_cfg"
+}
+
+8. 发送数据给网关
+v1/vnet/api/post_gate
+启动网关虚拟网络
+{
+	"id":"id",
+	"auth_code":"accesskey",
+	"output": "vnet_start"
+}
+停止网关虚拟网络
+{
+	"id":"id",
+	"auth_code":"accesskey",
+	"output": "vnet_stop"
+}
+
+9.  保持和本地服务的心跳
+v1/vnet/api/keep_alive
+{
+	"id":"id",
+	"enable_heartbeat": true,
+	"heartbeat_timeout" : 60,
+	"gate_sn": "gate_sn",
+	"auth_code": "accesskey"
+}
+
+
+topic匹配
+v1/vnet/VNET_STATUS/SERVICES
+v1/vnet/VNET_STATUS/CONFIG
+v1/vnet/PROXY_STATUS/LOCAL_PROXY
+v1/vnet/PROXY_STATUS/CLOUD_PROXY
+v1/update/api/RESULT
