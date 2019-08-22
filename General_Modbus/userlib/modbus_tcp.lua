@@ -196,7 +196,7 @@ end
 
 _M['06'] = {}
 -- 06功能码发送报文组合，地址，寄存器名称，开始地址，长度
-_M['06']._encode = function(addr, fc, startnum, value)
+_M['06']._encode = function(addr, fc, startnum, datatype, value)
     local valuebin = string.pack(big_dt_format[datatype], math.floor(value))
     local pack_bin =
         string.pack('>I6', 0) ..
