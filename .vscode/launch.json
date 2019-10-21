@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "launch",
+            "name": "lua53-launch",
             "type": "lua",
             "request": "launch",
             "stopOnEntry": true,

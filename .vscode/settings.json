@@ -1,3 +1,4 @@
 {
-    "LuaCoderAssist.luaparse.luaversion": 5.3
+    "LuaCoderAssist.luaparse.luaversion": 5.3,
+    "MarkdownPaste.path": "./imgs/"
 }

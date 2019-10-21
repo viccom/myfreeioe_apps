@@ -6,6 +6,7 @@ local s7 = require 'snap7'
 local basexx = require 'basexx'
 local csv_tpl = require 'userlib.csv_tpl'
 local conf_helper = require 'app.conf_helper'
+local cjson = require 'cjson'
 
 --- 注册对象(请尽量使用唯一的标识字符串)
 local app = class("siemens_S7_300")
@@ -104,18 +105,13 @@ function app:start()
                         end
 
                     else
-                        if v.dt ~= "float" then
-                            value = math.ceil(value)
-                        end
-                        self._log:info("Start set value:", value)
-                        local str = string.pack(">I2", tonumber(value))
-                        local data = s7.UserData.new(str, 2)
-                        self._log:info("hexdata:", basexx.to_hex(str))
+
                         -- WriteArea(int Area, int DBNumber, int Start, int Amount, int WordLen, void *pUsrData);
                         self._log:info("FCFCFCFC:::", v.fc, v.dt)
                         local tag_S7AreaID = nil
                         local tag_S7WordLen = s7.S7WordLen.Word
                         local tag_S7Addr = v.saddr
+                        local Amount = _dt_len_map[v.dt]
                         if v.fc == "I" then
                             tag_S7AreaID = s7.S7AreaID.PE
                         end
@@ -134,25 +130,45 @@ function app:start()
                         if v.fc == "TM" then
                             tag_S7AreaID = s7.S7AreaID.TM
                         end
-                        if v.dt == "bool" then
+                        
+                        local data, str
+
+                        if v.dt == "string" then
+                            str = value
+                            tag_S7WordLen = s7.S7WordLen.Byte
+                            Amount = math.ceil(v.pos/2)
+                            data = s7.UserData.new(str, v.pos)
+                        elseif v.dt == "bool" then
                             tag_S7WordLen = s7.S7WordLen.Bit
                             tag_S7Addr = (v.saddr * 8) + v.pos
                             str = string.pack(">I1", tonumber(value))
                             data = s7.UserData.new(str, 1)
+                        else
+                            if v.dt ~= "float" then
+                                value = math.ceil(value)
+                            end
+                            str = string.pack(_dt_format[v.dt], value)
+                            data = s7.UserData.new(str, _byte_len_map[v.dt])
                         end
+                        self._log:info("Start set value:", value)
+                        self._log:info("hexdata:", basexx.to_hex(str))                        
+
+
                         if tag_S7AreaID == nil then
-                            return
+                            return false, "tag_S7AreaID is nil"
                         end
-                        self._log:info("write info::::", tag_S7AreaID, tag_S7Addr, tag_S7WordLen)
-                        local r_ret = s7client:WriteArea(tag_S7AreaID, v.dbnum, tag_S7Addr, _byte_len_map[v.dt], tag_S7WordLen, data.data);
+                        self._log:info("write info::::", tag_S7AreaID, v.dbnum, tag_S7Addr, Amount, tag_S7WordLen)
+                        local r_ret = s7client:WriteArea(tag_S7AreaID, v.dbnum, tag_S7Addr, Amount, tag_S7WordLen, data.data);
 
                         if r_ret ~= 0 then
                             self._log:info(v.name .. " Write Failed!", r_ret)
                             self._log:info(s7.CliErrorText(r_ret))
+                            return false, s7.CliErrorText(r_ret)
                         else
                             self._log:info(v.name .. " Write successful", r_ret)
                             s7dev:fire_event(event.LEVEL_INFO, event.EVENT_COMM, sn .. "/" .. v.name .. "/" .. "设置数值成功!", { os_time = os.time(), time = now })
                             s7dev:set_input_prop_emergency(v.name, "value", value, self._sys:time(), 0)
+                            return true
                         end
                     end
                 end
@@ -166,7 +182,14 @@ function app:start()
 
     --- 生成设备唯一序列号
     local sys_id = self._sys:id()
-
+    
+    self._cycle = 1000
+    if self._conf.cycle ~= nil then
+        if math.tointeger( tonumber(self._conf.cycle)) > 0 then
+            self._cycle = math.tointeger( tonumber(self._conf.cycle))
+        end
+    end
+    
     local Link = self._conf
 
     if Link == nil then
@@ -221,67 +244,88 @@ function app:start()
         local items = {}
         local data_items = {}
         for i, v in ipairs(_points) do
-            if v.dt ~= "string" then
-                local item = s7.TS7DataItem.new()
-                -- self._log:info(i, v.name, 'rate:', v.rate)
-                local data = s7.UserData.new(_dt_len_map[v.dt])
-                item.Start = v.saddr
-                item.WordLen = s7.S7WordLen.Word
-                if v.fc == "I" then
-                    item.Area = s7.S7AreaID.PE
-                end
-                if v.fc == "Q" then
-                    item.Area = s7.S7AreaID.PA
-                end
-                if v.fc == "M" then
-                    item.Area = s7.S7AreaID.MK
-                end
-                if v.fc == "DB" then
-                    item.Area = s7.S7AreaID.DB
-                end
-                if v.fc == "CT" then
-                    item.Area = s7.S7AreaID.CT
-                end
-                if v.fc == "TM" then
-                    item.Area = s7.S7AreaID.TM
-                end
-                if v.dt == "bool" then
-                    item.WordLen = s7.S7WordLen.Bit
-                    item.Start = (v.saddr * 8) + v.pos
-                end
-                item.DBNumber = v.dbnum
-
-                item.Amount = _dt_len_map[v.dt]
-                item.pdata = data.data
-                if #items > 10 then
-                    self._log:info(i)
-                    items_g[#items_g + 1] = { items, data_items }
-                    items = {}
-                    data_items = {}
-                    items[#items + 1] = item
-                    local dataobj = {}
-                    dataobj["item"] = item
-                    dataobj["data"] = data
-                    dataobj["tagname"] = v.name
-                    dataobj["rate"] = v.rate
-                    dataobj["format"] = _dt_format[v.dt]
-                    dataobj["bytelen"] = _byte_len_map[v.dt] * _dt_len_map[v.dt]
-                    data_items[#data_items + 1] = dataobj
-                else
-                    items[#items + 1] = item
-                    local dataobj = {}
-                    dataobj["item"] = item
-                    dataobj["data"] = data
-                    dataobj["tagname"] = v.name
-                    dataobj["rate"] = v.rate
-                    dataobj["format"] = _dt_format[v.dt]
-                    dataobj["bytelen"] = _byte_len_map[v.dt] * _dt_len_map[v.dt]
-                    data_items[#data_items + 1] = dataobj
-                end
+            local item = s7.TS7DataItem.new()
+            -- self._log:info(i, v.name, 'rate:', v.rate)
+            local data
+            if v.dt == "string" then
+                data = s7.UserData.new(v.pos)
+            else
+                data = s7.UserData.new(_dt_len_map[v.dt])
             end
+            item.Start = v.saddr
+            item.DBNumber = v.dbnum
+            
+            item.pdata = data.data
+            if v.fc == "I" then
+                item.Area = s7.S7AreaID.PE
+            end
+            if v.fc == "Q" then
+                item.Area = s7.S7AreaID.PA
+            end
+            if v.fc == "M" then
+                item.Area = s7.S7AreaID.MK
+            end
+            if v.fc == "DB" then
+                item.Area = s7.S7AreaID.DB
+            end
+            if v.fc == "CT" then
+                item.Area = s7.S7AreaID.CT
+            end
+            if v.fc == "TM" then
+                item.Area = s7.S7AreaID.TM
+            end
+            
+            if v.dt == "bool" then
+                item.WordLen = s7.S7WordLen.Bit
+                item.Start = (v.saddr * 8) + v.pos
+            elseif v.dt == "string" then
+                item.WordLen = s7.S7WordLen.Byte
+                item.Amount = math.ceil(v.pos/2)
+            else
+                item.WordLen = s7.S7WordLen.Word
+                item.Amount = _dt_len_map[v.dt]
+            end
+
+            if #items > 10 then
+                self._log:info(i)
+                items_g[#items_g + 1] = { items, data_items }
+                items = {}
+                data_items = {}
+                items[#items + 1] = item
+                local dataobj = {}
+                dataobj["item"] = item
+                dataobj["data"] = data
+                dataobj["tagname"] = v.name
+                dataobj["rate"] = v.rate
+                if v.dt == "string" then
+                    dataobj["format"] = v.dt
+                    dataobj["bytelen"] = v.pos
+                else
+                    dataobj["format"] = _dt_format[v.dt]
+                    dataobj["bytelen"] = _byte_len_map[v.dt] * _dt_len_map[v.dt]
+                end
+
+                data_items[#data_items + 1] = dataobj
+            else
+                items[#items + 1] = item
+                local dataobj = {}
+                dataobj["item"] = item
+                dataobj["data"] = data
+                dataobj["tagname"] = v.name
+                dataobj["rate"] = v.rate
+                if v.dt == "string" then
+                    dataobj["format"] = v.dt
+                    dataobj["bytelen"] = v.pos
+                else
+                    dataobj["format"] = _dt_format[v.dt]
+                    dataobj["bytelen"] = _byte_len_map[v.dt] * _dt_len_map[v.dt]
+                end
+                data_items[#data_items + 1] = dataobj
+            end
+
         end
         items_g[#items_g + 1] = { items, data_items }
-
+        
         --- 设备的参数
         local plc_host = dev.host
         local plc_rack = math.tointeger(dev.rack or 0)
@@ -392,12 +436,24 @@ function app:run(tms)
                     self._log:info(s7.CliErrorText(ret))
                 end
                 for i, v in ipairs(data_items) do
-                    -- self._log:info("Item return:"..i, v["item"].Area, v["item"].Start, v["item"].WordLen, v["item"].Result)
+                    self._log:info("Item return:"..i, v["item"].Area, v["item"].Start, v["item"].WordLen, v["item"].Result)
                     if v["item"].Result == 0 then
                         -- self._log:info("data hex:"..i, basexx.to_hex(v["data"]:str(v["bytelen"])))
-                        local val, index = string.unpack(v["format"], v["data"]:str(v["bytelen"]))
+                        local val, index = nil, nil
+                        if v["format"]=="string" then
+                            val, index = string.unpack('z', v["data"]:str(v["bytelen"]))
+                            -- self._log:info("data hex:", v["tagname"], val)
+                            local r, err = s7dev:set_input_prop(v["tagname"], "value", val, self._sys:time(), 0)
+                            -- self._log:info(v["tagname"], r, err)
+                        else
+                            val, index = string.unpack(v["format"], v["data"]:str(v["bytelen"]))
+                            self._log:info(v["format"], v["tagname"], val)
+                            s7dev:set_input_prop(v["tagname"], "value", val * v["rate"], self._sys:time(), 0)
+                        end
+
                         -- self._log:info(v["tagname"].." data:"..i, val)
-                        s7dev:set_input_prop(v["tagname"], "value", val * v["rate"], self._sys:time(), 0)
+                    else
+                        self._log:info(v["tagname"], v["item"].Result)
                     end
                 end
             end
@@ -406,7 +462,7 @@ function app:run(tms)
         -- dev:set_input_prop('tag1', "value", math.random())
     end
 
-    return 1000 --下一采集周期为10秒
+    return self._cycle
 end
 
 --- 返回应用对象
